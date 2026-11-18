@@ -4,6 +4,7 @@
 
 #include "ccf/ds/json.h"
 #include "ccf/pal/snp_ioctl.h"
+#include "ccf/pal/tdx.h"
 
 namespace ccf::pal
 {
@@ -13,13 +14,15 @@ namespace ccf::pal
     SNP = 1,
     Virtual = 2,
     Unknown = 3,
+    TDX = 4,
   };
   DECLARE_JSON_ENUM(
     Platform,
     {{Platform::SGX, "SGX"},
      {Platform::SNP, "SNP"},
      {Platform::Virtual, "Virtual"},
-     {Platform::Unknown, "Unknown"}});
+     {Platform::Unknown, "Unknown"},
+     {Platform::TDX, "TDX"}});
 
   static Platform _detect_platform()
   {
@@ -33,6 +36,11 @@ namespace ccf::pal
     if (ccf::pal::snp::supports_sev_snp())
     {
       return Platform::SNP;
+    }
+
+    if (ccf::pal::tdx::supports_tdx())
+    {
+      return Platform::TDX;
     }
 
     return Platform::Virtual;

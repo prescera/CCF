@@ -118,6 +118,38 @@ namespace ccf::pal
     return "SnpAttestationMeasurement";
   }
 
+  // TDX
+  // MRTD, the launch measurement of the Trust Domain: SHA-384 over the initial
+  // memory image, and so the TDX analogue of the SNP launch measurement. The
+  // configuration a TD was launched under is measured separately, into
+  // MRCONFIGID, and is not this value.
+  static constexpr size_t tdx_attestation_measurement_size = 48;
+  using TdxAttestationMeasurement =
+    AttestationMeasurement<tdx_attestation_measurement_size, struct TdxTag>;
+
+  inline std::string schema_name(
+    [[maybe_unused]] const TdxAttestationMeasurement* tdx_measurement_type)
+  {
+    return "TdxAttestationMeasurement";
+  }
+
+  // TDX MRCONFIGID: the settable launch configuration claim, SHA-384. On Kata
+  // Confidential Containers it is the digest of the TD's initdata document.
+  //
+  // This is the TDX counterpart of SEV-SNP's HOST_DATA, but it is 48 bytes
+  // where HOST_DATA is 32, so it cannot share the `HostData` (Sha256Hash) type.
+  // It gets its own type and its own KV table, which is the same shape the
+  // per-platform measurement tables already have.
+  static constexpr size_t tdx_config_id_size = 48;
+  using TdxConfigId =
+    AttestationMeasurement<tdx_config_id_size, struct TdxConfigIdTag>;
+
+  inline std::string schema_name(
+    [[maybe_unused]] const TdxConfigId* tdx_config_id_type)
+  {
+    return "TdxConfigId";
+  }
+
   // Generic wrapper for code digests on all TEE platforms
   struct PlatformAttestationMeasurement
   {

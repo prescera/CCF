@@ -12,14 +12,16 @@ namespace ccf
   {
     oe_sgx_v1 = 0,
     insecure_virtual = 1,
-    amd_sev_snp_v1 = 2
+    amd_sev_snp_v1 = 2,
+    intel_tdx_v1 = 3
   };
 
   DECLARE_JSON_ENUM(
     QuoteFormat,
     {{QuoteFormat::oe_sgx_v1, "OE_SGX_v1"},
      {QuoteFormat::insecure_virtual, "Insecure_Virtual"},
-     {QuoteFormat::amd_sev_snp_v1, "AMD_SEV_SNP_v1"}});
+     {QuoteFormat::amd_sev_snp_v1, "AMD_SEV_SNP_v1"},
+     {QuoteFormat::intel_tdx_v1, "Intel_TDX_v1"}});
 
   /// Describes a quote (attestation) from trusted hardware
   struct QuoteInfo
@@ -28,7 +30,10 @@ namespace ccf
     QuoteFormat format = QuoteFormat::oe_sgx_v1;
     /// Enclave quote
     std::vector<uint8_t> quote;
-    /// Quote endorsements
+    /// Quote endorsements. Empty on Intel TDX, where the endorsing collateral
+    /// is not carried with the quote: it is per-platform-model rather than
+    /// per-node, so each verifying node resolves it from its own locally
+    /// supplied bundle.
     std::vector<uint8_t> endorsements;
     /// UVM endorsements (SNP-only)
     std::optional<std::vector<uint8_t>> uvm_endorsements;

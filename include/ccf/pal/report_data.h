@@ -51,6 +51,11 @@ namespace ccf::pal
   using SnpAttestationReportData =
     AttestationReportData<snp_attestation_report_data_size>;
 
+  // TDX
+  static constexpr size_t tdx_attestation_report_data_size = 64;
+  using TdxAttestationReportData =
+    AttestationReportData<tdx_attestation_report_data_size>;
+
   // Generic wrapper for attestation report data for _all_ platforms.
   struct PlatformAttestationReportData
   {
