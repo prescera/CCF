@@ -83,6 +83,7 @@ namespace ccf
     service_data,
     snp_security_policy,
     snp_uvm_endorsements,
+    tdx_initdata,
     sealing_recovery_data);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(GetCommit::Out);

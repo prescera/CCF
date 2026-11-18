@@ -37,6 +37,15 @@ namespace ccf
     static std::optional<pal::PlatformAttestationMeasurement> get_measurement(
       const QuoteInfo& quote_info);
 
+    /// The configuration identity the node was launched with, at the width the
+    /// platform actually attests: 32 bytes for SEV-SNP HOST_DATA and the
+    /// virtual equivalent, 48 for Intel TDX MRCONFIGID. Prefer this to
+    /// get_host_data() in anything that must work across platforms.
+    static std::optional<pal::PlatformAttestationMeasurement> get_config_id(
+      const QuoteInfo& quote_info);
+
+    /// The SHA-256-shaped view of the above. Returns nullopt on platforms whose
+    /// configuration identity does not fit, which includes Intel TDX.
     static std::optional<HostData> get_host_data(const QuoteInfo& quote_info);
 
     static std::optional<pal::snp::Attestation> get_snp_attestation(

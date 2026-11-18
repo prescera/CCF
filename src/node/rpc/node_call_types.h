@@ -13,6 +13,7 @@
 #include "ccf/service/tables/members.h"
 #include "ccf/service/tables/self_healing_open.h"
 #include "ccf/service/tables/service.h"
+#include "ccf/service/tables/tdx_config_id.h"
 #include "common/configuration.h"
 #include "enclave/interface.h"
 #include "node/identity.h"
@@ -69,6 +70,11 @@ namespace ccf
       std::optional<HostDataMetadata> snp_security_policy =
         std::nullopt; // base64-encoded
       std::optional<pal::UVMEndorsements> snp_uvm_endorsements = std::nullopt;
+      // The raw initdata document whose SHA-384 is the TD's MRCONFIGID.
+      // Recorded alongside the config id purely so the ledger is legible; the
+      // security property comes from the digest. The SEV-SNP counterpart is
+      // snp_security_policy.
+      std::optional<TdxConfigIdMetadata> tdx_initdata = std::nullopt;
       NodeInfoNetwork node_info_network;
       nlohmann::json node_data;
       nlohmann::json service_data;

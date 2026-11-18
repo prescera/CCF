@@ -8,18 +8,24 @@
 #include "ccf/historical_queries_utils.h"
 #include "ccf/pal/attestation.h"
 #include "ccf/pal/attestation_sev_snp.h"
+#include "ccf/pal/attestation_tdx.h"
 #include "ccf/pal/sev_snp_cpuid.h"
 #include "ccf/service/tables/code_id.h"
 #include "ccf/service/tables/jsengine.h"
 #include "ccf/service/tables/node_join_policy.h"
 #include "ccf/service/tables/snp_measurements.h"
 #include "ccf/service/tables/tcb_verification.h"
+#include "ccf/service/tables/tdx_config_id.h"
+#include "ccf/service/tables/tdx_measurements.h"
+#include "ccf/service/tables/tdx_tcb_policy.h"
 #include "ccf/service/tables/uvm_endorsements.h"
 #include "ccf/service/tables/virtual_measurements.h"
 #include "crypto/cose_utils.h"
 #include "ds/internal_logger.h"
 #include "node/js_policy.h"
 #include "node/uvm_endorsements.h"
+
+#include <algorithm>
 
 namespace ccf
 {
@@ -82,6 +88,15 @@ namespace ccf
         if (!tx.ro<VirtualMeasurements>(Tables::NODE_VIRTUAL_MEASUREMENTS)
                ->has(pal::VirtualAttestationMeasurement(
                  quote_measurement.data.begin(), quote_measurement.data.end())))
+        {
+          return QuoteVerificationResult::FailedMeasurementNotFound;
+        }
+        break;
+      }
+      case QuoteFormat::intel_tdx_v1:
+      {
+        if (!tx.ro<TdxMeasurements>(Tables::NODE_TDX_MEASUREMENTS)
+               ->has(pal::TdxAttestationMeasurement(quote_measurement)))
         {
           return QuoteVerificationResult::FailedMeasurementNotFound;
         }
@@ -173,8 +188,15 @@ namespace ccf
     }
   }
 
-  std::optional<HostData> AttestationProvider::get_host_data(
-    const QuoteInfo& quote_info)
+  // The platform-neutral configuration identity: what the workload was launched
+  // *with*, as opposed to the launch measurement, which is what was launched.
+  //
+  // Returned as a variable-length value because the platforms disagree on width
+  // -- SEV-SNP HOST_DATA is 32 bytes, TDX MRCONFIGID is 48 -- and truncating
+  // one to fit the other would mean the value CCF records is not the value the
+  // hardware attested.
+  std::optional<pal::PlatformAttestationMeasurement> AttestationProvider::
+    get_config_id(const QuoteInfo& quote_info)
   {
     switch (quote_info.format)
     {
@@ -183,21 +205,21 @@ namespace ccf
         auto j = ccf::parse_json_safe(quote_info.quote);
 
         auto it = j.find("host_data");
-        if (it != j.end())
+        if (it == j.end())
         {
-          const auto host_data = it->get<std::string>();
-          return ccf::crypto::Sha256Hash::from_hex_string(host_data);
+          LOG_FAIL_FMT(
+            "No security policy in virtual attestation from which to derive "
+            "host data");
+          return std::nullopt;
         }
 
-        LOG_FAIL_FMT(
-          "No security policy in virtual attestation from which to derive host "
-          "data");
-        return std::nullopt;
+        pal::PlatformAttestationMeasurement config_id{};
+        config_id.data = ccf::ds::from_hex(it->get<std::string>());
+        return config_id;
       }
 
       case QuoteFormat::amd_sev_snp_v1:
       {
-        HostData::Representation rep{};
         pal::PlatformAttestationMeasurement d = {};
         pal::PlatformAttestationReportData r = {};
         try
@@ -205,41 +227,95 @@ namespace ccf
           pal::verify_quote(quote_info, d, r);
           auto quote = *reinterpret_cast<const pal::snp::Attestation*>(
             quote_info.quote.data());
-          std::copy(
-            std::begin(quote.host_data),
-            std::end(quote.host_data),
-            rep.begin());
+          pal::PlatformAttestationMeasurement config_id{};
+          config_id.data.assign(
+            std::begin(quote.host_data), std::end(quote.host_data));
+          return config_id;
         }
         catch (const std::exception& e)
         {
           LOG_FAIL_FMT("Failed to verify attestation report: {}", e.what());
           return std::nullopt;
         }
-
-        return HostData::from_representation(rep);
       }
+
+      case QuoteFormat::intel_tdx_v1:
+      {
+        try
+        {
+          return pal::tdx::verify(quote_info).config_id;
+        }
+        catch (const std::exception& e)
+        {
+          LOG_FAIL_FMT("Failed to verify attestation report: {}", e.what());
+          return std::nullopt;
+        }
+      }
+
       case QuoteFormat::oe_sgx_v1:
       {
+        // SGX has no settable launch configuration claim.
         return std::nullopt;
       }
     }
+
+    return std::nullopt;
   }
 
-  QuoteVerificationResult verify_host_data_against_store(
-    ccf::kv::ReadOnlyTx& tx,
-    const QuoteInfo& quote_info,
-    std::optional<HostData>& host_data)
+  // The 32-bit-wide view of the configuration identity, for the platforms whose
+  // claim really is a SHA-256: SEV-SNP HOST_DATA and the virtual equivalent.
+  // Intel TDX has no representation here -- MRCONFIGID does not fit -- so
+  // callers that must work across platforms should use get_config_id().
+  std::optional<HostData> AttestationProvider::get_host_data(
+    const QuoteInfo& quote_info)
   {
     if (
       quote_info.format != QuoteFormat::amd_sev_snp_v1 &&
       quote_info.format != QuoteFormat::insecure_virtual)
     {
-      throw std::logic_error(
-        "Attempted to verify host data for an unsupported platform");
+      return std::nullopt;
     }
 
-    host_data = AttestationProvider::get_host_data(quote_info);
-    if (!host_data.has_value())
+    auto config_id = get_config_id(quote_info);
+    if (!config_id.has_value())
+    {
+      return std::nullopt;
+    }
+
+    if (config_id->data.size() != HostData::SIZE)
+    {
+      LOG_FAIL_FMT(
+        "Configuration identity is {} bytes, which does not fit HostData ({})",
+        config_id->data.size(),
+        HostData::SIZE);
+      return std::nullopt;
+    }
+
+    HostData::Representation rep{};
+    std::copy(config_id->data.begin(), config_id->data.end(), rep.begin());
+    return HostData::from_representation(rep);
+  }
+
+  // Check the configuration identity a node was launched with against the set
+  // the consortium has approved. Each platform has its own table, because each
+  // platform's claim is a different width and means a different thing.
+  QuoteVerificationResult verify_config_id_against_store(
+    ccf::kv::ReadOnlyTx& tx,
+    const QuoteInfo& quote_info,
+    std::optional<pal::PlatformAttestationMeasurement>& config_id)
+  {
+    if (
+      quote_info.format != QuoteFormat::amd_sev_snp_v1 &&
+      quote_info.format != QuoteFormat::insecure_virtual &&
+      quote_info.format != QuoteFormat::intel_tdx_v1)
+    {
+      throw std::logic_error(
+        "Attempted to verify configuration identity for an unsupported "
+        "platform");
+    }
+
+    config_id = AttestationProvider::get_config_id(quote_info);
+    if (!config_id.has_value())
     {
       return QuoteVerificationResult::FailedHostDataDigestNotFound;
     }
@@ -250,12 +326,20 @@ namespace ccf
     {
       auto* accepted_policies_table =
         tx.ro<VirtualHostDataMap>(Tables::VIRTUAL_HOST_DATA);
-      accepted_policy = accepted_policies_table->contains(host_data.value());
+      accepted_policy =
+        accepted_policies_table->contains(HostData(config_id->data));
     }
     else if (quote_info.format == QuoteFormat::amd_sev_snp_v1)
     {
       auto* accepted_policies_table = tx.ro<SnpHostDataMap>(Tables::HOST_DATA);
-      accepted_policy = accepted_policies_table->has(host_data.value());
+      accepted_policy = accepted_policies_table->has(HostData(config_id->data));
+    }
+    else if (quote_info.format == QuoteFormat::intel_tdx_v1)
+    {
+      auto* accepted_policies_table =
+        tx.ro<TdxConfigIdMap>(Tables::NODE_TDX_CONFIG_ID);
+      accepted_policy =
+        accepted_policies_table->has(pal::TdxConfigId(config_id->data));
     }
 
     if (!accepted_policy)
@@ -266,9 +350,96 @@ namespace ccf
     return QuoteVerificationResult::Verified;
   }
 
+  // Whether a joining TDX node's platform is current enough for the consortium.
+  //
+  // Distinct from the appraisal libcnap already performed, which answers "is
+  // this platform current according to Intel, under the policy *this node* was
+  // configured with". This answers "is that good enough for this service",
+  // using a floor the consortium set, so a node cannot admit itself by
+  // configuring a lax local policy or by presenting older collateral under
+  // which it still looks current.
+  QuoteVerificationResult verify_tdx_tcb_against_store(
+    ccf::kv::ReadOnlyTx& tx, const QuoteInfo& quote_info)
+  {
+    pal::tdx::Verdict verdict;
+    try
+    {
+      verdict = pal::tdx::verify(quote_info);
+    }
+    catch (const std::exception& e)
+    {
+      LOG_FAIL_FMT("Failed to verify attestation report: {}", e.what());
+      return QuoteVerificationResult::Failed;
+    }
+
+    auto* policies = tx.ro<TdxTcbPolicyMap>(Tables::TDX_TCB_POLICIES);
+
+    // An entry for this platform model, else the default entry under the empty
+    // key. If the consortium has set neither, there is no floor to meet.
+    auto policy = policies->get(verdict.fmspc);
+    if (!policy.has_value())
+    {
+      policy = policies->get("");
+    }
+    if (!policy.has_value())
+    {
+      LOG_INFO_FMT(
+        "Intel TDX: no TCB policy set for FMSPC {} and no default, so no "
+        "consortium floor is applied to this node",
+        verdict.fmspc);
+      return QuoteVerificationResult::Verified;
+    }
+
+    if (
+      verdict.tcb_evaluation_data_number <
+      policy->minimum_tcb_evaluation_data_number)
+    {
+      LOG_FAIL_FMT(
+        "Intel TDX: node was appraised against TCB evaluation data number {}, "
+        "below the required minimum {}",
+        verdict.tcb_evaluation_data_number,
+        policy->minimum_tcb_evaluation_data_number);
+      return QuoteVerificationResult::FailedInvalidTcbVersion;
+    }
+
+    if (
+      !policy->tcb_channel.empty() &&
+      verdict.tcb_channel != policy->tcb_channel)
+    {
+      LOG_FAIL_FMT(
+        "Intel TDX: node was appraised against the {} collateral channel, but "
+        "this service requires {}",
+        verdict.tcb_channel,
+        policy->tcb_channel);
+      return QuoteVerificationResult::FailedInvalidTcbVersion;
+    }
+
+    // Empty means UpToDate only, rather than "anything goes".
+    const auto& accepted = policy->accepted_tcb_statuses;
+    const bool status_ok = accepted.empty() ?
+      verdict.tcb_status == "UpToDate" :
+      std::find(accepted.begin(), accepted.end(), verdict.tcb_status) !=
+        accepted.end();
+    if (!status_ok)
+    {
+      LOG_FAIL_FMT(
+        "Intel TDX: node presented TCB status {}, which this service does not "
+        "accept",
+        verdict.tcb_status);
+      return QuoteVerificationResult::FailedInvalidTcbVersion;
+    }
+
+    return QuoteVerificationResult::Verified;
+  }
+
   QuoteVerificationResult verify_tcb_version_against_store(
     ccf::kv::ReadOnlyTx& tx, const QuoteInfo& quote_info)
   {
+    if (quote_info.format == QuoteFormat::intel_tdx_v1)
+    {
+      return verify_tdx_tcb_against_store(tx, quote_info);
+    }
+
     if (quote_info.format != QuoteFormat::amd_sev_snp_v1)
     {
       return QuoteVerificationResult::Verified;
@@ -346,7 +517,8 @@ namespace ccf
     // Verify the COSE_Sign1 signature and that the payload matches the
     // expected host_data.  Returns the decoded protected header on success.
     cose::Sign1ProtectedHeader verify_ts_signature_and_payload(
-      const ccf::cbor::Value& cose_array, const HostData& host_data)
+      const ccf::cbor::Value& cose_array,
+      const pal::PlatformAttestationMeasurement& config_id)
     {
       const auto& phdr_raw = ccf::cbor::rethrow_with_msg(
         [&]() -> const ccf::cbor::Value& { return cose_array->array_at(0); },
@@ -387,14 +559,19 @@ namespace ccf
           "Transparent statement signature verification failed");
       }
 
+      // Compared at the platform's own width rather than a fixed 32 bytes, so
+      // the same mechanism endorses a 32-byte SEV-SNP HOST_DATA and a 48-byte
+      // TDX MRCONFIGID without either being padded or truncated to fit.
       if (
-        payload.size() != HostData::SIZE ||
-        std::memcmp(payload.data(), host_data.h.data(), HostData::SIZE) != 0)
+        payload.size() != config_id.data.size() ||
+        std::memcmp(
+          payload.data(), config_id.data.data(), config_id.data.size()) != 0)
       {
         throw std::logic_error(fmt::format(
-          "Transparent statement payload ({}) does not match host_data ({})",
+          "Transparent statement payload ({}) does not match the attested "
+          "configuration identity ({})",
           ccf::ds::to_hex(payload),
-          host_data.hex_str()));
+          config_id.hex_str()));
       }
 
       return h;
@@ -554,7 +731,7 @@ namespace ccf
   QuoteVerificationResult verify_code_transparent_statement(
     ccf::kv::ReadOnlyTx& tx,
     const std::vector<uint8_t>& ts_raw,
-    const HostData& host_data,
+    const pal::PlatformAttestationMeasurement& config_id,
     std::shared_ptr<NetworkIdentitySubsystemInterface>
       network_identity_subsystem)
   {
@@ -570,7 +747,7 @@ namespace ccf
         },
         "COSE_Sign1 tag");
 
-      auto phdr = verify_ts_signature_and_payload(cose_array, host_data);
+      auto phdr = verify_ts_signature_and_payload(cose_array, config_id);
 
       auto receipt_inputs =
         verify_ts_receipts(ts_raw, cose_array, network_identity_subsystem);
@@ -608,15 +785,15 @@ namespace ccf
       return QuoteVerificationResult::Failed;
     }
 
-    std::optional<HostData> host_data{std::nullopt};
-    auto rc = verify_host_data_against_store(tx, quote_info, host_data);
+    std::optional<pal::PlatformAttestationMeasurement> config_id{std::nullopt};
+    auto rc = verify_config_id_against_store(tx, quote_info, config_id);
     if (rc == QuoteVerificationResult::FailedInvalidHostData)
     {
       if (code_transparent_statement.has_value())
       {
-        if (!host_data.has_value())
+        if (!config_id.has_value())
         {
-          // It must not happen after verify_host_data_against_store returns
+          // It must not happen after verify_config_id_against_store returns
           // FailedInvalidHostData, but let's handle gracefully.
           return QuoteVerificationResult::FailedHostDataDigestNotFound;
         }
@@ -624,7 +801,7 @@ namespace ccf
         rc = verify_code_transparent_statement(
           tx,
           code_transparent_statement.value(),
-          host_data.value(),
+          config_id.value(),
           network_identity_subsystem);
       }
     }

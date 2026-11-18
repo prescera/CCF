@@ -1662,6 +1662,26 @@ namespace ccf
               ctx.tx, attestation);
             break;
           }
+          case QuoteFormat::intel_tdx_v1:
+          {
+            auto config_id = AttestationProvider::get_config_id(in.quote_info);
+            if (config_id.has_value())
+            {
+              InternalTablesAccess::trust_node_tdx_config_id(
+                ctx.tx, pal::TdxConfigId(config_id->data), in.tdx_initdata);
+            }
+            else
+            {
+              LOG_FAIL_FMT(
+                "Unable to extract configuration identity from Intel TDX "
+                "quote");
+            }
+            // No UVM endorsements analogue: on Kata Confidential Containers the
+            // guest image is the operator's own, so no vendor publishes signed
+            // statements about it. The generic replacement is the code
+            // transparent statement path, which is platform-neutral.
+            break;
+          }
           case QuoteFormat::oe_sgx_v1:
           {
             break;

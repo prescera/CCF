@@ -888,7 +888,11 @@ namespace ccf
       }
 
       // Verify that the security policy matches the quoted digest of the policy
-      if (!config.attestation.environment.security_policy.has_value())
+      if (quote_info.format == QuoteFormat::intel_tdx_v1)
+      {
+        verify_tdx_initdata_against_attestation();
+      }
+      else if (!config.attestation.environment.security_policy.has_value())
       {
         LOG_INFO_FMT(
           "Security policy not set, skipping check against attestation host "
@@ -996,6 +1000,53 @@ namespace ccf
             fmt::format("Node was launched in unknown mode {}", start_type));
         }
       }
+    }
+
+    // On Intel TDX the configuration identity is MRCONFIGID, which on Kata
+    // Confidential Containers equals SHA-384 of the TD's initdata document.
+    //
+    // Note the asymmetry that makes this easy to get wrong: the Kata annotation
+    // carries base64(gzip(document)), but the measured value is the digest of
+    // the *decompressed* document. So the node is configured with the document
+    // itself and hashes it directly, rather than being handed the annotation.
+    void verify_tdx_initdata_against_attestation()
+    {
+      if (!config.attestation.environment.tdx_initdata.has_value())
+      {
+        LOG_INFO_FMT(
+          "Intel TDX: initdata not set, skipping check against attested "
+          "MRCONFIGID. The attested value is still recorded, so the consortium "
+          "governs which configuration identities may join");
+        return;
+      }
+
+      auto quoted_config_id = AttestationProvider::get_config_id(quote_info);
+      if (!quoted_config_id.has_value())
+      {
+        throw std::logic_error(
+          "Unable to find configuration identity in Intel TDX attestation");
+      }
+
+      const auto& initdata =
+        config.attestation.environment.tdx_initdata.value();
+      auto digest = ccf::crypto::make_hash_provider()->hash(
+        reinterpret_cast<const uint8_t*>(initdata.data()),
+        initdata.size(),
+        ccf::crypto::MDType::SHA384);
+
+      if (digest != quoted_config_id->data)
+      {
+        throw std::logic_error(fmt::format(
+          "SHA-384 of the configured initdata document {} does not match the "
+          "attested MRCONFIGID {}",
+          ccf::ds::to_hex(digest),
+          quoted_config_id->hex_str()));
+      }
+
+      LOG_INFO_FMT(
+        "Intel TDX: successfully verified attested initdata document, "
+        "MRCONFIGID {}",
+        quoted_config_id->hex_str());
     }
 
     void initiate_quote_generation()
@@ -1129,7 +1180,13 @@ namespace ccf
           return;
         }
 
-        if (quote_info.format != QuoteFormat::insecure_virtual)
+        // Everything reaching here needs no endorsement round trip before the
+        // node can launch. On Intel TDX that is because collateral is supplied
+        // locally as a signed bundle rather than fetched per node, so there is
+        // nothing to wait for.
+        if (
+          quote_info.format != QuoteFormat::insecure_virtual &&
+          quote_info.format != QuoteFormat::intel_tdx_v1)
         {
           throw std::runtime_error(fmt::format(
             "Unsupported quote format: {}",
@@ -3025,6 +3082,7 @@ namespace ccf
       create_params.snp_uvm_endorsements = snp_uvm_endorsements;
       create_params.snp_security_policy =
         config.attestation.environment.security_policy;
+      create_params.tdx_initdata = config.attestation.environment.tdx_initdata;
 
       create_params.node_info_network = config.network;
       create_params.node_data = config.node_data;
