@@ -449,9 +449,25 @@
             "additionalProperties": false
           },
           "description": "List of servers used to retrieve attestation report endorsement certificates (SEV-SNP only). The first server in the list is always used and other servers are only specified as fallback."
+        },
+        "tdx_collateral_bundle_dir": {
+          "type": ["string", "null"],
+          "description": "Path to a collateral bundle directory, or a root containing a `current` symlink to one (Intel TDX only). Required on TDX. Can contain environment variables. Intel collateral is published per platform model and expires roughly monthly, so it is supplied out-of-band -- across a data diode in an air-gapped deployment -- rather than fetched at verification time."
+        },
+        "tdx_collateral_syncer_pubkey": {
+          "type": ["string", "null"],
+          "description": "Ed25519 public key, 32 bytes as hex, that the collateral bundle's manifest is signed with (Intel TDX only). Required on TDX. This is the trust anchor for the collateral supply chain, so it belongs in node configuration rather than in the bundle it authenticates."
+        },
+        "tdx_initdata_file": {
+          "type": ["string", "null"],
+          "description": "Path to the raw initdata document this Trust Domain was launched with (Intel TDX only). Its SHA-384 is the attested MRCONFIGID, so setting it makes the node check its own launch configuration against what the hardware measured. Note the Kata annotation carries base64(gzip(document)) while the measured value digests the decompressed document, so this must be the document itself."
+        },
+        "tdx_policy_file": {
+          "type": ["string", "null"],
+          "description": "Path to a file containing a hardware policy as JSON (Intel TDX only): accepted TCB statuses, the TCB channel ('standard' or 'early'), advisory denylist and freshness grace windows. If omitted, a default policy is used which accepts UpToDate and SwHardeningNeeded on the 'standard' channel with no grace windows. Note the TCB channel is a deployment decision that can flip a verdict on identical hardware: the same quote can be UpToDate on 'standard' and OutOfDate on 'early'."
         }
       },
-      "description": "This section includes configuration for the attestation for AMD SEV-SNP platform.",
+      "description": "This section includes configuration for attestation on the AMD SEV-SNP and Intel TDX platforms.",
       "additionalProperties": false
     },
     "service_data_json_file": {

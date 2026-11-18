@@ -12,6 +12,7 @@
 #include "ccf/node/startup_config.h"
 #include "ccf/pal/attestation.h"
 #include "ccf/pal/attestation_sev_snp.h"
+#include "ccf/pal/attestation_tdx.h"
 #include "ccf/pal/platform.h"
 #include "ccf/pal/snp_ioctl.h"
 #include "ccf/service/node_info_network.h"
@@ -294,6 +295,75 @@ namespace ccf
         nlohmann::json(resolved_rpc_addresses).dump(),
         config.output_files.rpc_addresses_file);
     }
+  }
+
+  void configure_tdx_attestation(ccf::StartupConfig& startup_config)
+  {
+    if (ccf::pal::platform != ccf::pal::Platform::TDX)
+    {
+      return;
+    }
+
+    const auto& attestation = startup_config.attestation;
+    if (
+      !attestation.tdx_collateral_bundle_dir.has_value() ||
+      !attestation.tdx_collateral_syncer_pubkey.has_value())
+    {
+      // Refuse to start rather than start unverifiable. A TDX node with no
+      // collateral can produce a quote but cannot appraise one, including its
+      // own, so it would fail at launch anyway -- failing here says why.
+      throw std::logic_error(
+        "This node is running on Intel TDX, which requires "
+        "attestation.tdx_collateral_bundle_dir and "
+        "attestation.tdx_collateral_syncer_pubkey to be set");
+    }
+
+    ccf::pal::tdx::CollateralConfig collateral_config{
+      .bundle_dir = ccf::env::expand_envvars_in_path(
+        attestation.tdx_collateral_bundle_dir.value()),
+      .syncer_pubkey_hex = attestation.tdx_collateral_syncer_pubkey.value()};
+
+    if (attestation.tdx_policy_file.has_value())
+    {
+      const auto policy_file =
+        ccf::env::expand_envvars_in_path(attestation.tdx_policy_file.value());
+      collateral_config.policy_json = files::try_slurp_string(policy_file);
+      if (!collateral_config.policy_json.has_value())
+      {
+        throw std::logic_error(fmt::format(
+          "attestation.tdx_policy_file was set to {} but that file could not "
+          "be read",
+          policy_file));
+      }
+    }
+    else
+    {
+      LOG_INFO_FMT(
+        "Intel TDX: no attestation.tdx_policy_file set, using libcnap's "
+        "default "
+        "policy (UpToDate and SwHardeningNeeded accepted on the `standard` TCB "
+        "channel, no grace windows)");
+    }
+
+    if (attestation.tdx_initdata_file.has_value())
+    {
+      const auto initdata_file =
+        ccf::env::expand_envvars_in_path(attestation.tdx_initdata_file.value());
+      startup_config.attestation.environment.tdx_initdata =
+        files::try_slurp_string(initdata_file);
+      if (!startup_config.attestation.environment.tdx_initdata.has_value())
+      {
+        throw std::logic_error(fmt::format(
+          "attestation.tdx_initdata_file was set to {} but that file could not "
+          "be read",
+          initdata_file));
+      }
+    }
+
+    LOG_INFO_FMT(
+      "Intel TDX: collateral bundle {}", collateral_config.bundle_dir);
+
+    ccf::pal::tdx::set_collateral_config(collateral_config);
   }
 
   void configure_snp_attestation(ccf::StartupConfig& startup_config)
@@ -753,6 +823,10 @@ namespace ccf
     // Configure SNP attestation if on SNP platform
     configure_snp_attestation(startup_config);
 
+    // Likewise for TDX, whose collateral must be in place before the node
+    // generates or verifies its first quote.
+    configure_tdx_attestation(startup_config);
+
     if (ccf::pal::platform == ccf::pal::Platform::Virtual)
     {
       ccf::pal::emit_virtual_measurement();
@@ -788,11 +862,26 @@ namespace ccf
       ccf::ds::to_x509_time_string(startup_host_time);
 
     startup_config.sealing_recovery = config.sealing_recovery;
-    if (config.sealing_recovery.has_value())
+    if (
+      config.sealing_recovery.has_value() &&
+      ccf::pal::platform != ccf::pal::Platform::SNP)
     {
-      CCF_ASSERT_FMT(
-        ccf::pal::platform == ccf::pal::Platform::SNP,
-        "Sealing ledger secrets is only supported on SEV-SNP platforms");
+      // A hard error rather than CCF_ASSERT, which compiles away under NDEBUG:
+      // a release build would otherwise accept the configuration and fail much
+      // later, inside the SEV-SNP key derivation, with a message that does not
+      // mention sealing.
+      //
+      // Sealing depends on SEV-SNP's hardware-derived key
+      // (SEV_SNP_GUEST_MSG_DERIVED_KEY), which is bound to the guest's
+      // measurement. Intel TDX exposes no counterpart: configfs-tsm offers
+      // report generation only, so there is nothing to derive a sealing key
+      // from inside the Trust Domain. On TDX, ledger secrets must be protected
+      // by a key released on attestation by an external key management
+      // service, rather than sealed locally.
+      throw std::logic_error(fmt::format(
+        "Sealing ledger secrets is only supported on SEV-SNP platforms, but "
+        "this node is running on {}",
+        nlohmann::json(ccf::pal::platform).get<std::string>()));
     }
 
     // Configure startup based on command type

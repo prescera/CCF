@@ -86,7 +86,8 @@ namespace ccf
     CCFConfig::Attestation::Environment,
     security_policy,
     uvm_endorsements,
-    snp_endorsements);
+    snp_endorsements,
+    tdx_initdata);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(CCFConfig::Attestation);
   DECLARE_JSON_REQUIRED_FIELDS(CCFConfig::Attestation);
@@ -96,7 +97,11 @@ namespace ccf
     environment,
     snp_security_policy_file,
     snp_uvm_endorsements_file,
-    snp_endorsements_file);
+    snp_endorsements_file,
+    tdx_collateral_bundle_dir,
+    tdx_collateral_syncer_pubkey,
+    tdx_policy_file,
+    tdx_initdata_file);
 
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(CCFConfig::Snapshots::BackupFetch);
   DECLARE_JSON_REQUIRED_FIELDS(CCFConfig::Snapshots::BackupFetch);

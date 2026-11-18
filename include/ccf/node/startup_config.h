@@ -79,6 +79,24 @@ namespace ccf
       std::optional<std::string> snp_uvm_endorsements_file = std::nullopt;
       std::optional<std::string> snp_endorsements_file = std::nullopt;
 
+      // Intel TDX. A signed collateral bundle on disk, plus the Ed25519 public
+      // key its manifest is signed with. Unlike the SNP endorsements above,
+      // these are not read into `environment` at startup: the bundle is a
+      // directory that libcnap loads and signature-checks itself, and the path
+      // is passed through so a bundle republished by the syncer takes effect
+      // without restarting the node.
+      std::optional<std::string> tdx_collateral_bundle_dir = std::nullopt;
+      std::optional<std::string> tdx_collateral_syncer_pubkey = std::nullopt;
+      // A libcnap HardwarePolicy as JSON. Absent means the built-in default
+      // policy. Note the TCB channel lives in here, and is a deployment
+      // decision that can flip a verdict on identical hardware.
+      std::optional<std::string> tdx_policy_file = std::nullopt;
+      // Path to the raw initdata document this TD was launched with. Its
+      // SHA-384 is the attested MRCONFIGID. Note the Kata annotation carries
+      // base64(gzip(document)) while the measured value digests the
+      // *decompressed* document, so this must be the document itself.
+      std::optional<std::string> tdx_initdata_file = std::nullopt;
+
       struct Environment
       {
         // Each of these contains the string read from the relevant file. It is
@@ -86,6 +104,9 @@ namespace ccf
         std::optional<std::string> security_policy = std::nullopt;
         std::optional<std::string> uvm_endorsements = std::nullopt;
         std::optional<std::string> snp_endorsements = std::nullopt;
+        // The raw initdata document read from tdx_initdata_file. Unlike the
+        // three above this is not base64: it is hashed as-is.
+        std::optional<std::string> tdx_initdata = std::nullopt;
 
         bool operator==(const Environment&) const = default;
       };
