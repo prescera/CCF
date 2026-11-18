@@ -7,6 +7,7 @@
 #include "ccf/crypto/ecdsa.h"
 #include "ccf/crypto/eddsa_key_pair.h"
 #include "ccf/crypto/entropy.h"
+#include "ccf/crypto/hash_provider.h"
 #include "ccf/crypto/hmac.h"
 #include "ccf/crypto/key_wrap.h"
 #include "ccf/crypto/rsa_key_pair.h"
@@ -266,10 +267,29 @@ namespace ccf::js::extensions
         return ccf::js::core::constants::Exception;
       }
 
-      if (*digest_algo_name_str != "SHA-256")
+      // SHA-384 matters beyond completeness: a configuration identity on
+      // Intel TDX (MRCONFIGID) is the SHA-384 of the initdata document, so a
+      // constitution cannot check a proposed identity against the document it
+      // claims to digest without it.
+      ccf::crypto::MDType md_type = ccf::crypto::MDType::NONE;
+      if (*digest_algo_name_str == "SHA-256")
+      {
+        md_type = ccf::crypto::MDType::SHA256;
+      }
+      else if (*digest_algo_name_str == "SHA-384")
+      {
+        md_type = ccf::crypto::MDType::SHA384;
+      }
+      else if (*digest_algo_name_str == "SHA-512")
+      {
+        md_type = ccf::crypto::MDType::SHA512;
+      }
+      else
       {
         return JS_ThrowRangeError(
-          ctx, "unsupported digest algorithm, supported: SHA-256");
+          ctx,
+          "unsupported digest algorithm, supported: SHA-256, SHA-384, "
+          "SHA-512");
       }
 
       size_t data_size = 0;
@@ -281,7 +301,8 @@ namespace ccf::js::extensions
 
       try
       {
-        auto h = ccf::crypto::sha256(data, data_size);
+        auto hash_provider = ccf::crypto::make_hash_provider();
+        auto h = hash_provider->hash(data, data_size, md_type);
         return JS_NewArrayBufferCopy(ctx, h.data(), h.size());
       }
       catch (const std::exception& exc)
@@ -1123,10 +1144,20 @@ namespace ccf::js::extensions
         {
           mdtype = ccf::crypto::MDType::SHA256;
         }
+        else if (algo_hash == "SHA-384")
+        {
+          mdtype = ccf::crypto::MDType::SHA384;
+        }
+        else if (algo_hash == "SHA-512")
+        {
+          mdtype = ccf::crypto::MDType::SHA512;
+        }
         else
         {
           return JS_ThrowRangeError(
-            ctx, "Unsupported hash algorithm, supported: SHA-256");
+            ctx,
+            "Unsupported hash algorithm, supported: SHA-256, SHA-384, "
+            "SHA-512");
         }
 
         if (algo_name != "RSA-PSS" && algo_name != "ECDSA")

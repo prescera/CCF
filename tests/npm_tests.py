@@ -2,6 +2,8 @@
 # Licensed under the Apache 2.0 License.
 #
 import hmac
+import itertools
+import hashlib
 import http
 import json
 import os
@@ -463,11 +465,16 @@ def test_npm_app(network, args):
         except InvalidSignature:
             pass
 
-        # Test ECDSA signing + verification
+        # Test ECDSA signing + verification.
+        # Every hash the API accepts for signing must also be accepted for
+        # verification: a signature this API produces and cannot check would be
+        # a hole in its own contract.
         curves = [ec.SECP256R1, ec.SECP384R1]
-        for curve in curves:
+        for curve, hash_alg in itertools.product(
+            curves, ["SHA-256", "SHA-384", "SHA-512"]
+        ):
             key_priv_pem, key_pub_pem = infra.crypto.generate_ec_keypair(curve)
-            algorithm = {"name": "ECDSA", "hash": "SHA-256"}
+            algorithm = {"name": "ECDSA", "hash": hash_alg}
             r = c.post(
                 "/app/sign",
                 {
@@ -614,18 +621,22 @@ def test_npm_app(network, args):
             hmac_py = hmac.digest(key.encode(), data, py_hash)
             assert hmac_py == r.body.data(), f"{hmac_py} != {r.body.data()}"
 
-        r = c.post(
-            "/app/digest",
-            {
-                "algorithm": "SHA-256",
-                "data": b64encode(bytes("Hello world!", "ascii")).decode(),
-            },
-        )
-        assert r.status_code == http.HTTPStatus.OK, r.status_code
-        assert (
-            r.body.text()
-            == "c0535e4be2b79ffd93291305436bf889314e4a3faec05ecffcbb7df31ad9e51a"
-        ), r.body
+        # DigestAlgorithm declares all three, so all three must work.
+        for digest_alg, expected in [
+            ("SHA-256", hashlib.sha256),
+            ("SHA-384", hashlib.sha384),
+            ("SHA-512", hashlib.sha512),
+        ]:
+            message = bytes("Hello world!", "ascii")
+            r = c.post(
+                "/app/digest",
+                {
+                    "algorithm": digest_alg,
+                    "data": b64encode(message).decode(),
+                },
+            )
+            assert r.status_code == http.HTTPStatus.OK, r.status_code
+            assert r.body.text() == expected(message).hexdigest(), r.body
 
         r = c.get("/app/log?id=42")
         assert r.status_code == http.HTTPStatus.NOT_FOUND, r.status_code
