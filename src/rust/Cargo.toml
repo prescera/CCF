@@ -8,6 +8,14 @@ crate-type = ["staticlib"]
 
 [dependencies]
 cose-rs = { path = "../cose/cose_rs" }
+# Confidential Node Attestor Plugin: the TDX attestation verifier, consumed over its
+# C ABI by src/pal/attestation_tdx.cpp. Depended on here rather than linked as a
+# second static library because two independent Rust `staticlib`s each bundle their
+# own copy of libstd, which collides at link time. Folding it into this aggregate
+# means the `cnap_*` symbols land in libccf_rs.a alongside the `cose_*` ones, and no
+# new CMake target is needed.
+# cnap is its own repository, checked out beside CCF (see cmake/ccf_rs.cmake).
+cnap-ffi = { path = "../../../confidential-attestation-verification-library/crates/cnap-ffi" }
 
 [profile.release]
 lto = true

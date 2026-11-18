@@ -8,6 +8,22 @@ set(CCF_RS_LIB "libccf_rs.a")
 set(CCF_RS_LIB_BUILD_PATH "${CMAKE_BINARY_DIR}/${CCF_RS_LIB}")
 set(CCF_RS_CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo/build")
 
+# The Confidential Node Attestor Plugin (cnap), which verifies Intel TDX quotes,
+# is its own repository, checked out beside this one. src/rust/Cargo.toml names
+# the same location for its cnap-ffi dependency.
+get_filename_component(
+  CNAP_DIR
+  "${CCF_DIR}/../confidential-attestation-verification-library"
+  ABSOLUTE
+)
+if(NOT EXISTS "${CNAP_DIR}/crates/cnap-ffi/Cargo.toml")
+  message(
+    FATAL_ERROR
+    "cnap not found at ${CNAP_DIR}. Clone confidential-attestation-verification-library "
+    "into the directory that contains this CCF checkout."
+  )
+endif()
+
 find_program(CARGO NAMES cargo REQUIRED)
 find_program(RUSTC NAMES rustc REQUIRED)
 
@@ -75,6 +91,8 @@ add_custom_target(
     "${CCF_RS_DIR}/rust-toolchain.toml"
     "${CCF_DIR}/src/cose/cose_rs/Cargo.toml"
     "${CCF_DIR}/3rdparty/internal/cose-openssl/Cargo.toml"
+    "${CNAP_DIR}/Cargo.toml"
+    "${CNAP_DIR}/crates/cnap-ffi/Cargo.toml"
   COMMENT
     "Building ${CCF_RS_PACKAGE} Rust static library (Cargo profile: ${CCF_RS_CARGO_PROFILE_NAME})"
   USES_TERMINAL
