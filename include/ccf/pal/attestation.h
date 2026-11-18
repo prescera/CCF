@@ -28,6 +28,13 @@ namespace ccf::pal
     PlatformAttestationMeasurement& measurement,
     PlatformAttestationReportData& report_data);
 
+  // Implemented in src/pal/attestation_tdx.cpp as a thin call into libcnap. See
+  // ccf/pal/attestation_tdx.h for the collateral configuration it requires.
+  void verify_tdx_attestation_report(
+    const QuoteInfo& quote_info,
+    PlatformAttestationMeasurement& measurement,
+    PlatformAttestationReportData& report_data);
+
   void verify_quote(
     const QuoteInfo& quote_info,
     PlatformAttestationMeasurement& measurement,

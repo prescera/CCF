@@ -6,6 +6,7 @@
 #include "ccf/ds/quote_info.h"
 #include "ccf/pal/attestation.h"
 #include "ccf/pal/attestation_sev_snp.h"
+#include "ccf/pal/attestation_tdx.h"
 #include "ccf/pal/platform.h"
 #include "ccf/pal/snp_ioctl.h"
 #include "ds/files.h"
@@ -121,6 +122,14 @@ namespace ccf::pal
       case (ccf::pal::Platform::SNP):
       {
         generate_snp_quote(report_data, endorsement_cb, endorsements_servers);
+        return;
+      }
+
+      case (ccf::pal::Platform::TDX):
+      {
+        // No endorsements servers: Intel collateral is per platform model and
+        // supplied locally from a signed bundle, not fetched per node.
+        tdx::generate_tdx_quote(report_data, endorsement_cb);
         return;
       }
 

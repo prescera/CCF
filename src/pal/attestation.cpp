@@ -477,10 +477,14 @@ namespace ccf::pal
     {
       verify_snp_attestation_report(quote_info, measurement, report_data);
     }
+    else if (quote_info.format == QuoteFormat::intel_tdx_v1)
+    {
+      verify_tdx_attestation_report(quote_info, measurement, report_data);
+    }
     else
     {
       throw std::logic_error(
-        "CCF 7.0.0 only supports SNP and Virtual attestation formats");
+        "CCF only supports SNP, TDX and Virtual attestation formats");
     }
   }
 }

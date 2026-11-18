@@ -260,9 +260,16 @@ install(TARGETS http_parser EXPORT ccf DESTINATION lib)
 # CCF platform agnostic library
 add_ccf_static_library(
   ccf_pal
-  SRCS ${CCF_DIR}/src/pal/attestation.cpp
+  SRCS ${CCF_DIR}/src/pal/attestation.cpp ${CCF_DIR}/src/pal/attestation_tdx.cpp
   LINK_LIBS ccfcrypto
 )
+
+# The Intel TDX shim calls libcnap over its C ABI. The symbols themselves arrive
+# through ccfcrypto, which links the aggregate Rust staticlib that cnap-ffi is
+# built into (see cmake/ccf_rs.cmake); only the header is needed here. It is
+# PRIVATE because no CCF public header exposes a cnap type, so an application
+# building against an installed CCF never needs it.
+target_include_directories(ccf_pal PRIVATE ${CNAP_DIR}/crates/cnap-ffi/include)
 
 # CCF js lib
 add_ccf_static_library(
