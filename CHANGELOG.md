@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+### Added
+
+- Intel TDX attestation. Nodes running in a TDX Trust Domain generate quotes through the kernel's TSM report interface, and quotes are verified offline by [cnap](https://github.com/prescera/confidential-attestation-verification-library) against a locally supplied, signed Intel collateral bundle. Governance pins a TD's launch measurement (MRTD) and configuration identity (MRCONFIGID) in the new `public:ccf.gov.nodes.tdx.measurements` and `public:ccf.gov.nodes.tdx.config_id` tables, and a TCB floor in `public:ccf.gov.nodes.tdx.tcb_policy`; a joining node that supplies its initdata must have it hash to its attested MRCONFIGID. `GET /gov/service/join-policy` gains an optional `tdx` field. JavaScript applications can verify TDX quotes with the new `tdx_attestation` extension. The sample constitution gains the matching actions.
+
 ### Fixed
 
 - `ccf.crypto.digest` and `ccf.crypto.verifySignature` now accept SHA-384 and SHA-512, as their TypeScript typings already declared, so an application can verify the ES384 signatures that `ccf.crypto.sign` produces and that CCF's own COSE receipts carry.
