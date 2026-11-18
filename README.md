@@ -1,3 +1,13 @@
+> **Prescera Labs fork.** CCF 7.0.13 with Intel TDX attestation, used by the
+> [Nautilus](https://github.com/prescera/confidential-inference) confidential
+> inference platform. Our changes are on the `nautilus` branch:
+> [compare with upstream](https://github.com/prescera/CCF/compare/ccf-7.0.13...nautilus).
+> TDX quotes are verified by
+> [cnap](https://github.com/prescera/confidential-attestation-verification-library), which is
+> checked out beside this repository; see
+> [BUILD.md](https://github.com/prescera/confidential-inference/blob/main/BUILD.md)
+> to build it. The rest of this README is upstream's.
+
 # The Confidential Consortium Framework [![CI](https://github.com/microsoft/CCF/actions/workflows/ci.yml/badge.svg)](https://github.com/microsoft/CCF/actions/workflows/ci.yml) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/7808/badge)](https://www.bestpractices.dev/projects/7808)
 
 The Confidential Consortium Framework (CCF) is an open-source framework for building a new category of secure, highly available, and performant applications that focus on multi-party compute and data.</p>
