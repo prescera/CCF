@@ -576,6 +576,16 @@ target_link_libraries(
 add_hardening(verify_attestation)
 install(TARGETS verify_attestation DESTINATION bin)
 
+# Intel TDX attestation verification binary. Unlike the SNP one above this needs
+# no network: TDX collateral is supplied locally as a signed bundle.
+add_test_bin(
+  verify_tdx_attestation
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/pal/test/verify_tdx_attestation.cpp
+)
+target_link_libraries(verify_tdx_attestation PRIVATE ccf_pal)
+add_hardening(verify_tdx_attestation)
+install(TARGETS verify_tdx_attestation DESTINATION bin)
+
 if(BUILD_TESTS)
   enable_testing()
 
