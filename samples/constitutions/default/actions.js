@@ -232,6 +232,24 @@ function checkValidTcbVersionHex(value, field) {
   }
 }
 
+// Intel TDX measurement registers are fixed-width digests, so a value that is
+// not exactly the right length is a mistake worth catching at proposal time
+// rather than at the next node join.
+function checkHexString(value, field, expectedBytes) {
+  checkType(value, "string", field);
+  if (value !== value.toLowerCase()) {
+    throw new Error(`${field} must be a lowercase hex string: ${value}`);
+  }
+
+  // This will throw if the string contains non-hex characters
+  const buffer = hexStrToBuf(value);
+  if (buffer.byteLength != expectedBytes) {
+    throw new Error(
+      `${field} must convert to exactly ${expectedBytes} bytes, not ${buffer.byteLength}`,
+    );
+  }
+}
+
 function checkNone(args) {
   if (args !== null && args !== undefined) {
     throw new Error(`Proposal does not accept any argument, found "${args}"`);
@@ -1346,6 +1364,145 @@ const actions = new Map([
 
         // Adding a new allowed host data changes the semantics of any other open proposals, so invalidate them to avoid confusion or malicious vote modification
         invalidateOtherOpenProposals(proposalId);
+      },
+    ),
+  ],
+  [
+    "add_tdx_measurement",
+    new Action(
+      function (args) {
+        checkType(args.measurement, "string", "measurement");
+        checkHexString(args.measurement, "measurement", 48);
+      },
+      function (args, proposalId) {
+        const measurement = ccf.strToBuf(args.measurement);
+        const ALLOWED = ccf.jsonCompatibleToBuf("AllowedToJoin");
+        ccf.kv["public:ccf.gov.nodes.tdx.measurements"].set(
+          measurement,
+          ALLOWED,
+        );
+
+        // Adding a new allowed measurement changes the semantics of any other open proposals, so invalidate them to avoid confusion or malicious vote modification
+        invalidateOtherOpenProposals(proposalId);
+      },
+    ),
+  ],
+  [
+    "add_tdx_config_id",
+    new Action(
+      function (args) {
+        checkType(args.initdata, "string", "initdata");
+        checkType(args.config_id, "string", "config_id");
+        checkHexString(args.config_id, "config_id", 48);
+
+        // MRCONFIGID is SHA-384 of the initdata document, so when the document
+        // is supplied it must actually hash to the claimed value. Note the
+        // asymmetry with the Kata annotation, which carries a gzipped, base64
+        // form: this is the document itself.
+        if (args.initdata != "") {
+          const initdataDigest = ccf.bufToStr(
+            ccf.crypto.digest("SHA-384", ccf.strToBuf(args.initdata)),
+          );
+          const configId = ccf.bufToStr(hexStrToBuf(args.config_id));
+          if (initdataDigest != configId) {
+            throw new Error(
+              `The hash of the initdata document does not match config id ${args.config_id}`,
+            );
+          }
+        }
+      },
+      function (args, proposalId) {
+        ccf.kv["public:ccf.gov.nodes.tdx.config_id"].set(
+          ccf.strToBuf(args.config_id),
+          ccf.jsonCompatibleToBuf(args.initdata),
+        );
+
+        // Adding a new allowed config id changes the semantics of any other open proposals, so invalidate them to avoid confusion or malicious vote modification
+        invalidateOtherOpenProposals(proposalId);
+      },
+    ),
+  ],
+  [
+    "set_tdx_tcb_policy",
+    new Action(
+      function (args) {
+        // Empty fmspc is the default policy, applied to any platform model
+        // without an entry of its own.
+        checkType(args.fmspc, "string", "fmspc");
+        if (args.fmspc != "") {
+          checkHexString(args.fmspc, "fmspc", 6);
+        }
+
+        checkType(
+          args.policy?.minimum_tcb_evaluation_data_number,
+          "integer?",
+          "policy.minimum_tcb_evaluation_data_number",
+        );
+        checkType(args.policy?.tcb_channel, "string?", "policy.tcb_channel");
+        if (
+          args.policy?.tcb_channel !== undefined &&
+          args.policy.tcb_channel !== "standard" &&
+          args.policy.tcb_channel !== "early"
+        ) {
+          throw new Error("policy.tcb_channel must be 'standard' or 'early'");
+        }
+        checkType(
+          args.policy?.accepted_tcb_statuses,
+          "array?",
+          "policy.accepted_tcb_statuses",
+        );
+        for (const [i, status] of (
+          args.policy?.accepted_tcb_statuses ?? []
+        ).entries()) {
+          checkType(status, "string", `policy.accepted_tcb_statuses[${i}]`);
+        }
+      },
+      function (args, proposalId) {
+        ccf.kv["public:ccf.gov.nodes.tdx.tcb_policies"].set(
+          ccf.strToBuf(args.fmspc),
+          ccf.jsonCompatibleToBuf(args.policy),
+        );
+
+        invalidateOtherOpenProposals(proposalId);
+      },
+    ),
+  ],
+  [
+    "remove_tdx_config_id",
+    new Action(
+      function (args) {
+        checkType(args.config_id, "string", "config_id");
+      },
+      function (args) {
+        ccf.kv["public:ccf.gov.nodes.tdx.config_id"].delete(
+          ccf.strToBuf(args.config_id),
+        );
+      },
+    ),
+  ],
+  [
+    "remove_tdx_measurement",
+    new Action(
+      function (args) {
+        checkType(args.measurement, "string", "measurement");
+      },
+      function (args) {
+        ccf.kv["public:ccf.gov.nodes.tdx.measurements"].delete(
+          ccf.strToBuf(args.measurement),
+        );
+      },
+    ),
+  ],
+  [
+    "remove_tdx_tcb_policy",
+    new Action(
+      function (args) {
+        checkType(args.fmspc, "string", "fmspc");
+      },
+      function (args) {
+        ccf.kv["public:ccf.gov.nodes.tdx.tcb_policies"].delete(
+          ccf.strToBuf(args.fmspc),
+        );
       },
     ),
   ],

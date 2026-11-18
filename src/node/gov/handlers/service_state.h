@@ -4,6 +4,9 @@
 
 #include "ccf/base_endpoint_registry.h"
 #include "ccf/ds/json.h"
+#include "ccf/service/tables/tdx_config_id.h"
+#include "ccf/service/tables/tdx_measurements.h"
+#include "ccf/service/tables/tdx_tcb_policy.h"
 #include "node/gov/api_version.h"
 
 namespace ccf::gov::endpoints
@@ -126,15 +129,44 @@ namespace ccf::gov::endpoints
       tcb_versions,
       "tcbVersions");
 
+    struct TdxJoinPolicy
+    {
+      std::vector<std::string> measurements;
+      // Keyed by hex MRCONFIGID; the value is the initdata document, when the
+      // consortium recorded one. Separate from SnpJoinPolicy::host_data because
+      // MRCONFIGID is 48 bytes where HOST_DATA is 32.
+      std::map<std::string, std::string> config_id;
+      // Keyed by FMSPC; the empty key is the default.
+      std::map<std::string, ccf::TdxTcbPolicy> tcb_policies;
+
+      // Needed because this appears as an optional field below, and the
+      // optional-field machinery compares against a default instance.
+      bool operator==(const TdxJoinPolicy&) const = default;
+    };
+    DECLARE_JSON_TYPE(TdxJoinPolicy);
+    DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
+      TdxJoinPolicy,
+      measurements,
+      "measurements",
+      config_id,
+      "configId",
+      tcb_policies,
+      "tcbPolicies");
+
     struct JoinPolicy
     {
       BasicJoinPolicy sgx;
       VirtualJoinPolicy virtual_;
       SnpJoinPolicy snp;
+      // Optional rather than required, so that adding Intel TDX to an existing
+      // api-version does not break a client validating against the schema it
+      // was written for. It is always populated by this implementation.
+      std::optional<TdxJoinPolicy> tdx = std::nullopt;
     };
-    DECLARE_JSON_TYPE(JoinPolicy);
+    DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(JoinPolicy);
     DECLARE_JSON_REQUIRED_FIELDS_WITH_RENAMES(
       JoinPolicy, sgx, "sgx", virtual_, "virtual", snp, "snp");
+    DECLARE_JSON_OPTIONAL_FIELDS_WITH_RENAMES(JoinPolicy, tdx, "tdx");
 
     struct JwtIssuer
     {
@@ -399,6 +431,15 @@ namespace ccf::gov::endpoints
           quote_info["endorsedTcb"] = ccf::crypto::b64_from_raw(
             ds::from_hex(node_info.quote_info.endorsed_tcb.value()));
         }
+        break;
+      }
+      case ccf::QuoteFormat::intel_tdx_v1:
+      {
+        quote_info["format"] = "Intel_TDX_v1";
+        quote_info["quote"] =
+          ccf::crypto::b64_from_raw(node_info.quote_info.quote);
+        // No endorsements field: a TDX quote does not carry its collateral, so
+        // there is nothing here to report. See QuoteInfo::endorsements.
         break;
       }
     }
@@ -852,6 +893,45 @@ namespace ccf::gov::endpoints
                 response_body.snp.tcb_versions.emplace(cpuid, tcb_policy);
                 return true;
               });
+          }
+
+          // Describe Intel TDX join policy
+          {
+            api::TdxJoinPolicy tdx;
+
+            auto measurements_handle = ctx.tx.template ro<ccf::TdxMeasurements>(
+              ccf::Tables::NODE_TDX_MEASUREMENTS);
+            measurements_handle->foreach(
+              [&tdx](
+                const pal::TdxAttestationMeasurement& measurement,
+                const ccf::CodeStatus& status) {
+                if (status == ccf::CodeStatus::ALLOWED_TO_JOIN)
+                {
+                  tdx.measurements.push_back(measurement.hex_str());
+                }
+                return true;
+              });
+
+            auto config_id_handle = ctx.tx.template ro<ccf::TdxConfigIdMap>(
+              ccf::Tables::NODE_TDX_CONFIG_ID);
+            config_id_handle->foreach(
+              [&tdx](
+                const pal::TdxConfigId& config_id,
+                const ccf::TdxConfigIdMetadata& initdata) {
+                tdx.config_id.emplace(config_id.hex_str(), initdata);
+                return true;
+              });
+
+            auto tcb_policies_handle = ctx.tx.template ro<ccf::TdxTcbPolicyMap>(
+              ccf::Tables::TDX_TCB_POLICIES);
+            tcb_policies_handle->foreach(
+              [&tdx](
+                const std::string& fmspc, const ccf::TdxTcbPolicy& policy) {
+                tdx.tcb_policies.emplace(fmspc, policy);
+                return true;
+              });
+
+            response_body.tdx = std::move(tdx);
           }
 
           ctx.rpc_ctx->set_response_json(response_body, HTTP_STATUS_OK);

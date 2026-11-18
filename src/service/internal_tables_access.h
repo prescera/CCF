@@ -12,6 +12,8 @@
 #include "ccf/service/tables/nodes.h"
 #include "ccf/service/tables/snp_measurements.h"
 #include "ccf/service/tables/tcb_verification.h"
+#include "ccf/service/tables/tdx_config_id.h"
+#include "ccf/service/tables/tdx_measurements.h"
 #include "ccf/service/tables/users.h"
 #include "ccf/service/tables/virtual_measurements.h"
 #include "ccf/tx.h"
@@ -857,12 +859,29 @@ namespace ccf
               CodeStatus::ALLOWED_TO_JOIN);
           break;
         }
+        case QuoteFormat::intel_tdx_v1:
+        {
+          tx.wo<TdxMeasurements>(Tables::NODE_TDX_MEASUREMENTS)
+            ->put(
+              pal::TdxAttestationMeasurement(node_measurement),
+              CodeStatus::ALLOWED_TO_JOIN);
+          break;
+        }
         default:
         {
           throw std::logic_error(fmt::format(
             "Unexpected quote format {} when trusting node code id", platform));
         }
       }
+    }
+
+    static void trust_node_tdx_config_id(
+      ccf::kv::Tx& tx,
+      const pal::TdxConfigId& config_id,
+      const std::optional<TdxConfigIdMetadata>& initdata = std::nullopt)
+    {
+      tx.wo<TdxConfigIdMap>(Tables::NODE_TDX_CONFIG_ID)
+        ->put(config_id, initdata.value_or(""));
     }
 
     static void trust_node_virtual_host_data(

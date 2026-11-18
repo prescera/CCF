@@ -34,7 +34,7 @@ def test_api_service_state(network, args):
         LOG.info("/gov/service/join-policy endpoint")
         r = c.get("/gov/service/join-policy")
         assert r.status_code == 200, r
-        assert set(r.body.json()) == {"sgx", "snp", "virtual"}
+        assert set(r.body.json()) == {"sgx", "snp", "tdx", "virtual"}
 
         LOG.info("/gov/service/jwk endpoint")
         r = c.get("/gov/service/jwk")

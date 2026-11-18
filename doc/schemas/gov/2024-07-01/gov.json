@@ -1751,6 +1751,10 @@
         "virtual": {
           "$ref": "#/definitions/ServiceState.VirtualJoinPolicy",
           "description": "Policy applied to virtual nodes (insecure, intended for debugging)."
+        },
+        "tdx": {
+          "$ref": "#/definitions/ServiceState.TdxJoinPolicy",
+          "description": "Policy applied to nodes running in Intel TDX trust domains. Optional rather than required, so a client written against an earlier revision of this api-version still validates."
         }
       },
       "required": [
@@ -2324,6 +2328,65 @@
         "uvmEndorsements",
         "tcbVersions"
       ]
+    },
+    "ServiceState.TdxJoinPolicy": {
+      "type": "object",
+      "description": "Join policy fields specific to nodes running on Intel TDX hardware.",
+      "properties": {
+        "measurements": {
+          "type": "array",
+          "description": "Acceptable MRTD values, the launch measurement of the Trust Domain.",
+          "items": {
+            "type": "string",
+            "format": "hex",
+            "pattern": "^[a-f0-9]{96}$"
+          }
+        },
+        "configId": {
+          "type": "object",
+          "description": "Collection of acceptable MRCONFIGID values, keyed by hex-encoded SHA-384 digest. The Intel TDX counterpart of SNP hostData, and 48 bytes rather than 32.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tcbPolicies": {
+          "type": "object",
+          "description": "TCB floors keyed by FMSPC, the Intel platform model identifier. The empty key is the default applied to any platform without its own entry.",
+          "additionalProperties": {
+            "$ref": "#/definitions/ServiceState.TdxTcbPolicy"
+          }
+        }
+      },
+      "required": [
+        "measurements",
+        "configId",
+        "tcbPolicies"
+      ]
+    },
+    "ServiceState.TdxTcbPolicy": {
+      "type": "object",
+      "description": "The floor a joining Intel TDX node's platform must meet, set by the consortium rather than by each node's own configuration.",
+      "properties": {
+        "minimumTcbEvaluationDataNumber": {
+          "type": "integer",
+          "description": "Minimum acceptable Intel tcbEvaluationDataNumber. Intel increments this on every TCB recovery, so it is monotonic and expresses 'collateral at least this recent' in a way a status string cannot."
+        },
+        "acceptedTcbStatuses": {
+          "type": "array",
+          "description": "TCB statuses a joining node may present. Empty means UpToDate only.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tcbChannel": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "early"
+          ],
+          "description": "The collateral channel a joining node must have been appraised against. The same quote can be UpToDate on one channel and OutOfDate on the other, so this is not left to the node."
+        }
+      }
     },
     "ServiceState.SnpQuoteInfo": {
       "type": "object",
