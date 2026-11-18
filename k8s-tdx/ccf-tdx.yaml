@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ccf-tdx-bootstrap
+  namespace: ccf-tdx
+data:
+  member0_cert.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIBtjCCATygAwIBAgIUc5iZVc3JG7g694sPM52Y9zCFKVAwCgYIKoZIzj0EAwMw
+    EjEQMA4GA1UEAwwHbWVtYmVyMDAeFw0yNjA4MzExMTIxNDZaFw0yNzA4MzExMTIx
+    NDZaMBIxEDAOBgNVBAMMB21lbWJlcjAwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAR7
+    RgYpaUR9n6QUVm6cugE8zLR8N2bpxV4B5/8e9KGXCbqdtd6o2iffD/E47xv2s9CS
+    mwgHrlJ8nudGYUp+dKgkqVLmiGPI+eMJlbecTTvL926bnik0JSfDYrQNHhfevAGj
+    UzBRMB0GA1UdDgQWBBTqRkURbRUK1HllCPt+6s6OXbXsozAfBgNVHSMEGDAWgBTq
+    RkURbRUK1HllCPt+6s6OXbXsozAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMD
+    A2gAMGUCMQCjoMf27LtzdTOQ184ZutaZzl0RRYx0AIchnm4dukVu4WAuU/F9BuhA
+    OSSlex2kCOgCMHgHPaq+8UFGoXUe6LC5v21RIyNmq9bnwJlFG1tVWXh+J8zSQ5qI
+    aBzIY+N5OOAgZw==
+    -----END CERTIFICATE-----
+  member0_enc_pubk.pem: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoWpO1crjKUK4Od7YdG9V
+    o1yiBt/KQtjkHDly153AyfU4LJi4oqvO1oAdrdaUtEQ+82IFtlvNSly5rYDN+qOW
+    6qbEsYJu49hMZXJ8s6CzN5lS6ro43dAMIgJrLb/13zG5sWVEE2o3uBXGA7Y/GPpw
+    lQrvdsgoEHCQj/g/6lpZNlA/EFr5IOIFlHM7aKXaKtkZrbq/RRE/eR6qFsqglkd5
+    wboPZbBxd7S5xz3tq+CGeNw5vkHLdwin1PnjeOQAQ2XHqWTHqHbwo6ZHO4Nb6dtO
+    IaC1/6okjavS0H0o8SltKejsLectJNa8tNswCptUzJxORporP6xc3awNjwGV08qH
+    cwIDAQAB
+    -----END PUBLIC KEY-----
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ccf-tdx
+  namespace: ccf-tdx
+spec:
+  clusterIP: 10.43.22.61
+  selector: { app: ccf-tdx }
+  ports:
+    - { name: rpc, port: 8000, targetPort: 8000 }
+    - { name: n2n, port: 8001, targetPort: 8001 }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ccf-tdx
+  namespace: ccf-tdx
+  labels: { app: ccf-tdx }
+  annotations:
+    io.katacontainers.config.hypervisor.cc_init_data: "H4sIAANllWoC/41Uya6jRhTd8xUtb3qB0i4mA4u3KKCMMYONGWxoPT0xGTCTGQzGXx+ctKIokaLUqu65p+6t0j11gjJtunzIqm8f31Z9FlAcvcLGpOvzpn5D4AfxA6ww7GccDMEntori7MfQVOVqSX7//h37WYTRJ1YHVfJmN9drmdfJ17X/WvAV9ujKN/w+n1dBmnxiyXPogq+uaYavKOmG/JpHwZD0C+vnauH99l4CkhXjm4hOtrJVRGijP1BMVxQpv4kirNUUTooAU8WRglxTH528u3U6oe81oOlCbA7OI2kmyfT2auMr2RgZ0EQaJphw2tko1IVChoSD4DRZUeXWwcUAUV08Qnmba9Vz9Mhtrwv0RbIVUpfSSbfRU39FM6a7zQLqCxjNh1/ggv3vou8nCMoNGkJatFmRy/wEhOVqWwgPIjQ5+M6LqbrsEWS0esS1YtDmXM2FmUbOnGCk3pSTU1Fsi2fPli1v5JhtprifmtwqOJU9Kruik5KMvR0FeYwNtAaOusfdlDi+LughYj65F3mJoXBdr9xt2JLJfBjI2+bk0puQMk3l4Fr4o3HDmwFTXi1ceFHptkAysyvAKR4wgz0XIhoz5Xk7Sm23HiudkgTrwtt1JLMtAVyVZDfl8T5GwGlsU245kbHLzF7nJk7RawxdTM/VVZNiAjwGmjVu77g2N/vYwCGrXrfbKG6MAlkpnA3X0RBce1ykpnNiFH0uvGLMj1Uuk86VMYPxSR+oqCYskKgK1TnsZa2S+yuo+P6oE1T4Cij00prApUBg0vxMP9bphIFJkaAJhYbeCboi47oA3qOLpdQ8C4JJ3SUyb4BfB0PXV52cAtYg9HWcTS94FVLDxXaWjmQJntP/Jh/f5N1JF+CVQ4INl6a7tS73MvbuhsxTocuqiOp96ZPlK97tmUUomZczfUgaWago3t+FFFBu7lvEK1lizD+DR0T5tzT3Z/8c3yPqNCcW08XnfaldDGaJy9BiXnGlPzzySbzj6K/CEcImNRVCOkLXCUJo/1OR/S9FIth5FzE1KtHvSSgO6agmRglyGi2fSYvIIyPeTxdCoVH45CnHsXJmJ1V1vWmzpYZMELmMDN7hs6d32rr+He1dodBcoUQ65j+UoV6jbJ86eEo7ZGvddh7ggs5mc0rsnjh/ZjjoX83n5cBx3iVQcoYW2bS80VXjrCNsiM5VhSuMGYsN7ic57R2BhPfBmkvdmNvcwCPJlIasZZGl5eC+DWl/uDziDvT9PbBMgE1UDwQP7ADeHInMOEbX7iaDoulGlN5HitkH436ZrBkEDyA1r9m/K23rBAwudQd+cnis2ryoVLfCY2snr2463NsNr5/lzUYos0z1Xf/gG3YDuWc1wIpvycqjyoNFGnRkeuz08fGn3SFD+rfZLWb4ib0N9neZfIV0oQUAAA=="
+spec:
+  runtimeClassName: kata-qemu-tdx
+  restartPolicy: Never
+  initContainers:
+    - name: stage
+      image: localhost:5000/ccf-tdx:v8
+      command:
+        - sh
+        - -c
+        - |
+          set -eux
+          mkdir -p /host/ledger /host/snapshots
+          cp /bootstrap/member0_cert.pem /bootstrap/member0_enc_pubk.pem /host/
+          ls -l /host
+      volumeMounts:
+        - { name: bootstrap, mountPath: /bootstrap, readOnly: true }
+        - { name: host, mountPath: /host }
+  containers:
+    - name: cchost
+      image: localhost:5000/ccf-tdx:v8
+      # configfs is not mounted in the container by default, so the kernel's TSM
+      # report interface (/sys/kernel/config/tsm/report) -- the only way to ask
+      # the TD for a quote -- is not visible and CCF would fall back to
+      # Platform::Virtual. Mounting it needs CAP_SYS_ADMIN. This is privilege
+      # *inside the guest VM*, which is itself inside the TEE, so it does not
+      # weaken the TD boundary; the host still cannot see in.
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          mount -t configfs none /sys/kernel/config
+          test -d /sys/kernel/config/tsm/report
+          exec cchost --config /opt/ccf-tdx/node-config.json
+      securityContext:
+        capabilities:
+          add: [SYS_ADMIN]
+      workingDir: /host
+      ports:
+        - { name: rpc, containerPort: 8000 }
+        - { name: n2n, containerPort: 8001 }
+      volumeMounts:
+        - { name: host, mountPath: /host }
+      resources:
+        requests: { cpu: "2", memory: 2Gi }
+        limits: { cpu: "2", memory: 4Gi }
+  volumes:
+    - name: bootstrap
+      configMap: { name: ccf-tdx-bootstrap }
+    - name: host
+      emptyDir: {}

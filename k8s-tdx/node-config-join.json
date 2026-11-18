@@ -1,0 +1,39 @@
+{
+  "network": {
+    "node_to_node_interface": {
+      "bind_address": "0.0.0.0:8001",
+      "published_address": "10.43.22.62:8001"
+    },
+    "rpc_interfaces": {
+      "main": {
+        "bind_address": "0.0.0.0:8000",
+        "published_address": "10.43.22.62:8000"
+      }
+    }
+  },
+  "node_certificate": {
+    "subject_alt_names": [
+      "iPAddress:10.43.22.62",
+      "iPAddress:127.0.0.1",
+      "dNSName:localhost"
+    ]
+  },
+  "attestation": {
+    "tdx_collateral_bundle_dir": "/opt/ccf-tdx/collateral",
+    "tdx_collateral_syncer_pubkey": "4a852061a9b63f8111864563b035e111e29af7565165a438c9e64446efb8e3c9",
+    "tdx_initdata_file": "/opt/ccf-tdx/initdata.toml"
+  },
+  "worker_threads": 1,
+  "ledger_signatures": {
+    "tx_count": 5000,
+    "delay": "100ms"
+  },
+  "command": {
+    "type": "Join",
+    "service_certificate_file": "/host/service_cert.pem",
+    "join": {
+      "retry_timeout": "2s",
+      "target_rpc_address": "10.43.22.61:8000"
+    }
+  }
+}

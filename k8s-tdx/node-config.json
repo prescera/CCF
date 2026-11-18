@@ -1,0 +1,53 @@
+{
+  "network": {
+    "node_to_node_interface": {
+      "bind_address": "0.0.0.0:8001",
+      "published_address": "10.43.22.61:8001"
+    },
+    "rpc_interfaces": {
+      "main": {
+        "bind_address": "0.0.0.0:8000",
+        "published_address": "10.43.22.61:8000"
+      }
+    }
+  },
+  "node_certificate": {
+    "subject_alt_names": [
+      "iPAddress:10.43.22.61",
+      "iPAddress:127.0.0.1",
+      "dNSName:localhost"
+    ]
+  },
+  "attestation": {
+    "tdx_collateral_bundle_dir": "/opt/ccf-tdx/collateral",
+    "tdx_collateral_syncer_pubkey": "4a852061a9b63f8111864563b035e111e29af7565165a438c9e64446efb8e3c9",
+    "tdx_initdata_file": "/opt/ccf-tdx/initdata.toml"
+  },
+  "worker_threads": 1,
+  "ledger_signatures": {
+    "tx_count": 5000,
+    "delay": "100ms"
+  },
+  "command": {
+    "type": "Start",
+    "service_certificate_file": "/host/service_cert.pem",
+    "start": {
+      "constitution_files": [
+        "/opt/ccf-tdx/constitution/validate.js",
+        "/opt/ccf-tdx/constitution/apply.js",
+        "/opt/ccf-tdx/constitution/resolve.js",
+        "/opt/ccf-tdx/constitution/actions.js"
+      ],
+      "members": [
+        {
+          "certificate_file": "/host/member0_cert.pem",
+          "encryption_public_key_file": "/host/member0_enc_pubk.pem"
+        }
+      ],
+      "cose_signatures": {
+        "issuer": "10.43.22.61:8000",
+        "subject": "ccf.signature.v1"
+      }
+    }
+  }
+}

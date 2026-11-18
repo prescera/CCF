@@ -1,0 +1,24 @@
+# Lean CCF build environment: mirrors .github/actions/install-ci-dependencies
+# (scripts/setup-ci.sh install_build_dependencies) without test/node/h2spec deps.
+FROM mcr.microsoft.com/azurelinux/base/core:3.0
+
+RUN gpg --import /etc/pki/rpm-gpg/MICROSOFT-RPM-GPG-KEY && tdnf -y update
+RUN tdnf -y install git ca-certificates
+RUN tdnf -y install \
+      build-essential \
+      clang \
+      cmake \
+      ninja-build \
+      which \
+      openssl-devel \
+      libuv-devel \
+      nghttp2-devel \
+      curl-devel \
+      doxygen \
+      clang-tools-extra-devel \
+      rust \
+      libbacktrace-static
+# cpack packages the perf-system `submit` target, which needs Apache Arrow.
+# The parquet package is named parquet-libs-devel, not parquet-devel.
+RUN tdnf -y install libarrow-devel parquet-libs-devel
+RUN tdnf -y install rpm-build python3 cpio
